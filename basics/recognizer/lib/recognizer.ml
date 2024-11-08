@@ -15,16 +15,15 @@ let lang2 l =
         )
 ;; 
 
-(** Language recognizer for regex "0?1*". Recursive function called by "lang3" *)
-let rec lang3_rec l i = match l with
-|[x] when x =='0' && i=1 -> true
-|'0'::tl when i == 0 -> lang3_rec tl (i+1)
-|hd::tl when hd=='0' || hd=='1' -> lang3_rec tl i
-|_ -> false
+(** Language recognizer for regex "0[01]*0". Recursive function called by "lang3" *)
+let lang3 l = match l with
+  |['0'] -> false   (* Only has one 0 *)
+  | '0'::tl -> (match List.rev tl with
+                |'0'::_ -> true   (* Ends with 0 *)
+                | _ -> false)     
+  | _ -> false  (* Doesn't start with 0*)
 ;;
 
-let lang3 l = lang3_rec l 0;;
-;;
           
 (** Language recognizer for regex "0*10*10*" *)
 let rec lang4_rec l i = match l with
