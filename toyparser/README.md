@@ -40,33 +40,37 @@ type ast =
 
 The main utility function in the `Toyparser` library is:
 ```ocaml
-eval : ast -> result
+eval : ast -> int_or_err
 ````
-This function takes as input an abstract syntax tree,
-and outputs its integer value.
-For instance:
+This function takes as input an abstract syntax tree, and outputs its value.
+In order to handle possible evaluation errors, the return type `int_or_err` is a tagged union:
+the tag `Ok` wraps correct evaluation results (of type `int`), while
+the tag `Error` wraps erros messages (of type `string`). 
+
+An example of a correct evaluation is the following:
 ```ocaml
 eval (Add (Add (Const 1,  Const 2), Const 3))
 > Ok 6
 ```
 
-The main routine in [bin/main.ml](bin/main.ml)
-reads a line from the stdin, and processes it
-according to the command line:
-```
-dune exec toyparser
-```
-which evaluates the string fed from stdin, and prints the result.
-
-If everything is fine, you can test the project as follows:
-```bash
-echo "1 + 2 + 3 + (1 + 2)" | dune exec toyparser
-> 9
-```
-
 The project requires you to work at the following tasks:
 
 ## Task 1
+
+In the first task, you are just required to experiment with the project frontend and add a few tests.
+
+The main routine in [bin/main.ml](bin/main.ml) reads a line from the stdin, parses it, then evaluates the AST obtained from the parser, and prints the result to stdout.
+
+Test the main routine by running:
+```
+dune exec toyparser
+```
+Then, add some unit tests in the `test` directory, and run them:
+```
+dune test
+```
+
+## Task 2
 
 Extend the lexer, the parser and the evaluation function
 to handle also the subtraction operator.
@@ -91,7 +95,7 @@ Then, when parsing:
 ```
 The parser will output the AST:
 ```ocaml
-Add(Add (Const 1, Const 2), Const 3)
+Add (Add (Const 1, Const 2), Const 3)
 ```
 
 ### Associativity and Priority in Menhir
@@ -114,23 +118,81 @@ In the example above, the token `OR` has lower priority than both `AND` and `NOT
 
 Behind the scenes, the parse tables are constructed so that `OR` cannot appear as a direct child of `AND` in the AST of any given expression without parentheses, and therefore the parser will always try to reduce `AND` first.
 
-## Evaluating results
+## Task 3
+
+Extend the lexer, the parser and the evaluation function
+to handle also multiplication and division.
+
+Revise the evaluation function to report an error when attempting to divide by zero.
+The result of `eval e` must be `Result.Error msg` if the evaluation involves a division by zero. The error message must mention the value of the dividend, as in the following output:
+
+```sh
+echo "1 + 2 / 0" | dune exec toyparser
+> Error: tried to divide 2 by zero
+```
+Implement unit tests in the `test` directory.
+
+## Task 4
+
+Extend the lexer, the parser and the evaluation function
+to handle also the unary minus.
+For instance:
+```bash
+echo "-1 - 2 - -3" | dune exec toyparser
+> 0
+```
+Implement unit tests in the `test` directory.
+
+## Task 5
+
+Extend the lexer, the parser and the evaluation function
+to handle also hexadecimal numbers in C syntax.
+For instance:
+```bash
+echo "0x01 + 2" | dune exec toyparser
+> 3
+```
+Implement unit tests in the `test` directory.
+
+## Task 6
+
+Refactor the code of `eval` using the `==>` operator defined in [lib/main.ml](/lib/main.ml):
+
+```ocaml
+let ( ==> ) (res : int_or_err) (f : int -> int_or_err) : int_or_err =
+  match res with
+  | Ok value -> f value
+  | Error msg -> Error msg
+```
+
+Read on to understand what it does and how to use it. An example refactoring with `==>` is provided at the end.
+
+### Background: Evaluating results
 
 Let's have a closer look at the type of the evaluator: 
+```ocaml
+eval : ast -> int_or_err
+```
+Both `ast` and `int_or_err` are custom types. In particular, `int_or_err` is an instance of a more general type called *result*.
+
+A **result** is a tagged union of two constructors, `Ok` and `Error`, parameterized on two type variables `'a`  (pronounced "alpha") and `'error`. `Ok` carries values of type `'a` and `Error` carries values of type `'error`:
 
 ```ocaml
-eval : ast -> result
+type ('a, 'error) result =
+  | Ok of 'a
+  | Error of 'error
 ```
+This type is already defined in the `Result` module of OCaml's standard library and it can be used by typing `Result.t`.
 
-Both `ast` and `result` are custom types. In particular, `result` is defined in [lib/mail.ml](/lib/main.ml) as a synonym of `(int, string) Result.t` by the line:
+In [lib/mail.ml](/lib/main.ml) we instantiated `Result.t` with the types `int` and `string` and called the resulting type `int_or_err`:
 
 ```ocaml
-type result = (int, string) Result.t
+type int_or_err = (int, string) Result.t
 ```
 
-This type expresses the fact that the computations of `eval` can _either_ successfully compute an integer value _or_ they can catastrophically fail with an error that is described by a string message.
+By using `int_or_err` as the return type of `eval`, we express the fact that the computations of `eval` can _either_ successfully compute an integer value _or_ they can fail with an error that is described by a string message.
 
-When we successfully compute a value and are ready to return it, we wrap it in the `Ok` tag. This is what we've done in the evaluator so far. For example, constant expressions carry a number that can be immediately wrapped in `Ok`:
+Using results is pretty straightforward. When we successfully compute a value and are ready to return it, we wrap it in the `Ok` tag. This is what we've done in the evaluator so far. For example, constant expressions carry a number that can be immediately wrapped in `Ok`:
 
 ```ocaml
 | Const n -> Ok n
@@ -152,7 +214,7 @@ match res with
 | Error msg -> Error msg
 ```
 
-This is a common pattern in functional programming and it can be factored out into a higher-order function that takes a result, an anonymous function that transforms a value into a new result, and returns a brand new result. We've named this function `==>` (pronounced "bind") so that it can be used as a infix operator:
+This is a common pattern in functional programming and it can be factored out into a higher-order function that takes a result, an anonymous function that transforms a value into a new result, and returns a brand new result. We've named this function `==>` (pronounced "bind"):
 
 ```ocaml
 let ( ==> ) res f =
@@ -160,6 +222,8 @@ let ( ==> ) res f =
   | Ok value -> Ok (f value)
   | Error msg -> Error msg
 ```
+
+This operator is also available in the `Result` module of the standard library under the name `Result.bind`. Our custom definition in [lib/main.ml](/lib/main.ml) lets us use it as an infix operator.
 
 The thick arrow operator helps us make the code of the evaluator a lot more succinct and readable. The case for `Add`, for example, simplifies to:
 
@@ -171,40 +235,3 @@ The thick arrow operator helps us make the code of the evaluator a lot more succ
 ```
 
 This pattern has an additional benefit in that it is short-circuiting: if one of the expressions being evaluated fails with `Error _` then this is the result of the whole `Add` case; execution won't continue on evaluating the other expression.
-
-## Task 2
-
-Extend the lexer, the parser and the evaluation function
-to handle also multiplication and division.
-
-Revise the evaluation function to report an error when attempting to divide by zero.
-The result of `eval e` must be `Result.Error msg` if the evaluation involves a division by zero. The error message must mention the value of the dividend, as in the following output:
-
-```sh
-echo "1 + 2 / 0" | dune exec toyparser
-> Error: tried to divide 2 by zero
-```
-
-## Task 3
-
-Extend the lexer, the parser and the evaluation function
-to handle also the unary minus.
-For instance:
-```bash
-echo "-1 - 2 - -3" | dune exec toyparser
-> 0
-```
-
-## Task 4
-
-Extend the lexer, the parser and the evaluation function
-to handle also hexadecimal numbers in C syntax.
-For instance:
-```bash
-echo "0x01 + 2" | dune exec toyparser
-> 3
-```
-
-## Task 5
-
-Implement unit tests in the `test` directory.
