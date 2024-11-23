@@ -1,5 +1,0 @@
-(executable
- (public_name andboolexpr)
- (name main)
- (libraries andboolexprLib))
- (using menhir 2.1)
