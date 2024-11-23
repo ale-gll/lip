@@ -19,3 +19,4 @@ rule read_token =
   | id { ID (Lexing.lexeme lexbuf) }
   | num { CONST (Lexing.lexeme lexbuf) }    
   | eof { EOF }
+
