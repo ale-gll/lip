@@ -1,4 +1,4 @@
 (executable
  (public_name andboolexpr)
  (name main)
- (libraries andboolexpr unix))
+ (libraries andboolexprLib))
