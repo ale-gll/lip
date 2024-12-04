@@ -22,6 +22,13 @@ let string_of_intorerr : int_or_err -> string = function
 
 let rec eval : ast -> int_or_err = function
   | Const n -> Ok n
+  | Hex n -> Ok n
+  | Neg (e) ->
+    let res1 = eval e in
+    (match (res1) with 
+    | Error err1 -> Error err1
+    | Ok v1 -> Ok (-v1)
+    )
   | Add (e1,e2) ->
     let res1 = eval e1 in
     let res2 = eval e2 in
@@ -55,7 +62,6 @@ let rec eval : ast -> int_or_err = function
     | Ok v1, Ok 0 -> Error (Printf.sprintf "Error: tried to divide %d by zero" v1) 
     | Ok v1, Ok v2 -> Ok (v1 / v2)
     )
-
 
   
 
