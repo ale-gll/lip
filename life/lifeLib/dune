@@ -1,0 +1,5 @@
+(library
+(libraries ANSITerminal)
+ (name lifeLib))
+(menhir (modules parser))
+(ocamllex lexer)
