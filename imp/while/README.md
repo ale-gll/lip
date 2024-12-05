@@ -75,7 +75,7 @@ can no longer be reduced, i.e. it is already in state tagged `St`.
 
 Finally, define a function:
 ```ocaml
-trace : int -> cmd -> term list
+trace : int -> cmd -> conf list
 ```
 such that `trace n c` performs n steps of the small-step semantics
 of the command c.
@@ -114,6 +114,7 @@ The small-step semantics of commands can be described by the following inference
   Cmd (while e do c, st) --> St st
 
           st |- e ==> true
+<<<<<<< HEAD
 ---------------------------------------------------- [While_True]
   Cmd (while e do c, st) --> Cmd (c; while e do c)
 ```
@@ -128,6 +129,21 @@ bind : state -> ide -> exprval -> state
 such that `bind st x v` is returns the state `st[x |-> v]`.
 
 This is a bit tricky to implement. You can use the hint below if you can't figure it out yourself.
+=======
+-------------------------------------------------------- [While_True]
+  Cmd (while e do c, st) --> Cmd (c; while e do c, st)
+```
+
+`st[x |-> v]` is notation for "`x` bound to `v` on top of `st`", meaning that you must extend the state function with an additional binding mapping the string `x` to the exprval `v`.
+
+Therefore, you need to implement an auxiliary function:
+```ocaml
+bind : state -> ide -> exprval -> state
+```
+such that `bind st x v` yields the state `st[x |-> v]`.
+
+This is a bit tricky to implement, because the values of `state` are functions. You can use the hint below if you can't figure it out by yourself.
+>>>>>>> dbd37d6d3c3b0ff052d446ea59fbe325adc3be74
 
 <details>
 
@@ -139,6 +155,16 @@ let bind st x v = fun y -> if x = y then v else st x
 
 </details>
 
+<<<<<<< HEAD
+=======
+The initial state, from which all computations start, is the state with no
+bindings at all. We call this state `bottom`:
+```ocaml
+bottom : state
+```
+
+You will need `bottom` for the implementation of `trace`.
+>>>>>>> dbd37d6d3c3b0ff052d446ea59fbe325adc3be74
 
 ## Lexer and Parser
 
@@ -180,9 +206,14 @@ WHILE expr DO cmd
 WHILE expr DO cmd 
               cmd . SEQ cmd
 
-[bla bla...]
+** In state 39, looking ahead at SEQ, reducing production
+** cmd -> WHILE expr DO cmd
+** is permitted because of the following sub-derivation:
+
+cmd SEQ cmd // lookahead token appears
+WHILE expr DO cmd .
 ```
-Basically, it's trying to tell us that it doesn't know what to do when parsing a program involving a sequence and a while. Do we put the sequence under the while or vice-versa? For example, the program:
+Basically, it's trying to tell us that it doesn't know what to do when parsing a program involving a sequence and a while command. Do we put the sequence under the while or vice versa? For a concrete example, the program:
 ```
 while 0 <= x do x := x - 1; skip
 ```
@@ -196,6 +227,8 @@ or:
 ```
 
 A similar problem arises between if-then-else and sequences.
-These conflicts can be solved either by assigning the right precedence to the token for `;` and the tokens for "do" and "else", _or_ simply by adding parentheses to the command syntax.
+These conflicts can be solved in one of two ways:
+1. Assigning the right precedence to the tokens for `;`, `do` and `else`;
+1. Adding parentheses to the command syntax.
 
-Since the tests use parentheses, follow the second approach.
+Since the test programs use parentheses, follow the second approach.
