@@ -3,12 +3,17 @@
 }
 
 (* Only digits *)
-let num = ['0'-'9']
+let white = [' ' '\t']+
+let digit = ['0'-'9']
 
 rule read_token =
     parse
+    | white { read_token lexbuf }   (* ignores any white space *)
+    | "E" { EXT }
     | "S" { SURVIVE }
     | "B" { BIRTH }
     | "/" { SLASH }
-    | num { DIGIT (Lexing.lexeme lexbuf) }
+    | "," { COMMA }
+    | ".." { RANGE }
+    | digit { DIGIT (Lexing.lexeme lexbuf) } (* captures the string that the lexer matched in the input *)
     | eof { EOF }
