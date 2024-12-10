@@ -51,3 +51,13 @@ let%test "trace1_reduces_in_10_steps" =
   in
 
   (count_trace1_steps expr 0) <= 10
+
+
+
+(* ### Unit tests for task 6 *)
+
+let%test "test_extended_syntax_1" = 
+  parse "true && (false || true)" = If(True, If(False, True, True), False)
+
+let%test "test_extended_syntax_2" = 
+  parse "false || (true && false)" = If(False, True, If(True, False, False))
