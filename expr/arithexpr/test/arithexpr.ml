@@ -51,6 +51,11 @@ let rec int_of_nat = function
   | Succ n -> 1 + int_of_nat n
   | _ -> failwith "int_of_nat on non-nat"
 
+let rec is_nv = function
+  | Zero -> true
+  | Succ e -> is_nv e
+  | _ -> false
+
 (* reduce expression with small-step semantics and convert into value option *)
 let weval_smallstep e = match last (trace e) with
     True -> Some (Bool true)

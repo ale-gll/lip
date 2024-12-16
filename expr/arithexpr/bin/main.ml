@@ -17,6 +17,10 @@ let read_line () =
 
 (* print a result *)
 
+let string_of_val = function
+| Bool x -> string_of_bool x
+| Nat x -> string_of_int x
+
 let print_val e = print_string (string_of_val e); print_newline();;
 
 (* print a trace *)
