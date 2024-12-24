@@ -111,7 +111,7 @@ let rec trace_rec n conf =
     try
       let conf' = trace1 conf in
       conf :: (trace_rec (n-1) conf')
-    with NoRuleApplies -> [conf]
+    with _ -> [conf]
   else
     [conf]
 
