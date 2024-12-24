@@ -9,28 +9,18 @@ let parse (s : string) : cmd =
 
 exception NoRuleApplies 
 
-(* lookup_env checks if a identifier is present inside the stack of envoirments *)
-let rec lookup_env (ide:string) (env : env list) =
-  match env with
-  | [] -> raise (UnboundVar ide)
-  | hd::tl -> try hd ide with _ -> lookup_env ide tl
-;;
+let fetch_value st x = 
+  match (topenv st) x with 
+  | IVar l
+  | BVar l -> getmem st l
 
 (* eval_expr: state -> expr -> memval. Evaluates an expression expr with the current
   state of the program *)
-let rec eval_expr (st :state) (e :expr) : memval = 
-  let env_stack = getenv st in
-  let mem = getmem st in (* this is a function. mem: loc -> memval*)
-  
+let rec eval_expr (st :state) (e :expr) : memval =   
   match e with
   | True -> Bool true
   | False -> Bool false
-  | Var x -> (
-    let env_val = lookup_env x env_stack in
-    match env_val with
-    | IVar loc 
-    | BVar loc -> mem loc
-    )
+  | Var x -> fetch_value st x
   | Const x -> Int x  (* Const is always a Int _ *)
   | Not x -> (
     match eval_expr st x with
@@ -75,29 +65,25 @@ let rec eval_expr (st :state) (e :expr) : memval =
   )
 ;;
 
+let bind f x v = fun y -> if x=y then v else f y ;;
 
 (* eval_decl : state -> decl list -> state *)
-let eval_decl (st:state) (dl: decl list) : state = 
-
-  let rec eval_decl_rec (env, loc) dl = 
-    match dl with
-    | [] -> (env, loc)
-    | (IntVar ide) :: tl -> 
-      let env' = bind_env env ide (IVar loc) in 
-      eval_decl_rec (env', loc + 1) tl
-
-    | (BoolVar ide) :: tl ->
-      let env' = bind_env env ide (BVar loc) in
-      eval_decl_rec (env', loc + 1) tl
+let eval_decl (st: state) (decls: decl list) : state = 
+  
+  let rec eval_decl_rec (env, l) decls = 
+    match decls with
+    | [] -> (env, l)
+    | IntVar ide :: tl -> 
+      let env' = bind env ide (IVar l) in 
+      eval_decl_rec (env', l+1) tl
+    | BoolVar ide :: tl -> 
+      let env' = bind env ide (BVar l) in 
+      eval_decl_rec (env', l+1) tl
   in
 
-  (* Update the env stack and first free location in memory*)
-  let updated_env, updated_loc = eval_decl_rec (topenv st, getloc st) dl in 
-  
-  let new_env_stack = updated_env :: popenv st in 
+  let new_env, new_loc = eval_decl_rec (topenv st, getloc st) decls in 
 
-  (* Create a new state *)
-  make_state new_env_stack (getmem st) updated_loc 
+  make_state (new_env :: getenv st) (getmem st) new_loc
 ;;
 
 (* trace1 : conf -> conf *)
@@ -109,38 +95,18 @@ let rec trace1 = function
   | Assign (ide, expr) -> (
     (* Evaluate the expression *)
     let expr_value = eval_expr state expr in 
+    let env = topenv state in 
     
-    (* Find the location associated to the variable 'ide' *)
-    let curr_env = topenv state in
-    let loc, type_of_var = 
-      match (try Some (curr_env ide) with _ -> None) with
-      | Some (IVar l) -> l, "Int"
-      | Some (BVar l) -> l, "Bool"
-      | None -> raise (UnboundVar ide)
-    in
-
-    (* Check if type is correct *)
-    let is_type_correct = 
-      match type_of_var, expr_value with
-    | "Int", Int _ | "Bool", Bool _ ->  true
-    | _, _ -> false
-    in
-
-    if is_type_correct then 
-      (* Update memory with the new_value*)
-      let new_mem = bind_mem (getmem state) loc expr_value in 
-      (* Create the new state by setting the new memory *)
-      St (setmem state new_mem)
-    else 
-      raise (TypeError "Mismatched types in assignment")
+    match expr_value, env ide with 
+    | Int n, IVar loc -> St (setmem state (bind_mem (getmem state) loc (Int n)))
+    | Bool b, BVar loc -> St (setmem state (bind_mem (getmem state) loc (Bool b)))
+    | _ -> raise (TypeError "Type mismatch in 'assign' statement")
   )
   | Seq (cmd1, cmd2) -> ( 
     (* Reduce cmd1 *)
     match trace1 (Cmd(cmd1, state)) with
-    (* cmd1' is the reduced cmd1 and state' is the possible new state *)
     | Cmd(cmd1', state') -> trace1 (Cmd(Seq(cmd1', cmd2), state'))
-    (* cmd1 is done, keep reducing cmd2 *)
-    | St state' -> Cmd(cmd2, state')
+    | St state' -> Cmd(cmd2, state')  (* cmd1 done, reduce cmd2 *)
   )
   | If (e0, e1, e2) -> (
     (* e0 must be evaluated to Bool *)
@@ -149,30 +115,17 @@ let rec trace1 = function
     | Bool false -> trace1 (Cmd(e2, state))
     | _ -> raise (TypeError "Expected boolean expression in 'if' condition")
   )
-  | While(expr, cmd) ->(
+  | While(expr, cmd) -> (
     match eval_expr state expr with
     | Bool true -> Cmd(Seq(cmd, While(expr, cmd)), state)
     | Bool false -> St state
     | _ -> raise (TypeError "Expected boolean expression in 'while' condition ")
     )
-  | Decl(dl, cmd) -> (
-    (* Update the state with the new variables *)
-    let new_state = eval_decl state dl in 
-    (* Reduce further with the updated state from the declarations execution *)
-    Cmd(cmd, new_state)
-    )
+  | Decl(dl, cmd) -> Cmd(Block(cmd), eval_decl state dl)
   | Block(cmd) -> ( 
-    (* Before executing the commands inside the block, it's appropriate to save the environment stack
-    to the state it was before the block began. This step should protect the outer scopes.
-    This also works for intermediate steps: 
-    We continue restoring 'saved_env_stack' to ensure the scope visible to the block remains consistent
-    and doesn't leak outside. *)
-    let saved_env_stack = getenv state in 
-
     match trace1 (Cmd(cmd, state)) with
-    (* Restore the original env stack before the block was executed *)
-    | St final_state -> St (setenv final_state saved_env_stack)
-    | Cmd(cmd', state') -> Cmd (Block(cmd'), setenv state' saved_env_stack)
+    | St st' -> St (setenv st' (popenv st'))
+    | Cmd(cmd', st') -> Cmd(Block(cmd'), st')
   )
 )
 ;;
